@@ -1,54 +1,73 @@
+<div align="center">
+
 # claude-code-session-cleaner
 
-A stopgap tool to **list and delete Claude Code CLI session files** until the
-official `/delete` command (tracked in
-[anthropics/claude-code#26904](https://github.com/anthropics/claude-code/issues/26904))
-lands.
+[![License](https://img.shields.io/badge/License-MIT-lightgrey.svg)](./LICENSE)
+[![Language](https://img.shields.io/badge/language-Bash-4EAA25.svg)](https://www.gnu.org/software/bash/)
 
-Works as **both** a standalone shell script (interactive) and a Claude Code
-slash command (conversational).
+[**English**](./README.md) | [**中文**](./README_CN.md)
 
----
-
-## Why this exists
-
-Claude Code has no built-in way to delete a saved session. When the list in
-`/resume` gets noisy, or a session contains an accidentally-pasted secret,
-the only workaround is to:
-
-1. Exit Claude Code
-2. `cd ~/.claude/projects/`
-3. Figure out which `<encoded-path>/<uuid>.jsonl` file corresponds to the session
-4. `rm` it — and remember to also clean the sibling `<uuid>/` directory holding
-   subagents / tool-results / memory (otherwise you leave orphan artifacts)
-
-This tool does all of that, safely, with the same labels you see in `/resume`.
-
-## What it shows
-
-```
-[  1] 2026-04-24 18:17  EchoCenter    728K  bcf9c007…  我觉得你01地图做的不好，不够通俗易懂…
-[  2] 2026-04-24 08:02  EchoCenter     24K  34738f62…  拉一下最新的仓库
-[  3] 2026-04-22 10:07  HERTCERT       31M  9f362cce…  ★ fix-v2-production-stability
-```
-
-Each row: **index** · **mtime** · **project** · **file size** · **uuid prefix** ·
-**label**. Label priority matches `/resume`:
-
-1. `★ <name>` — `custom-title` set via `/rename` in Claude Code
-2. `last-prompt` — the most recent user prompt (what `/resume` shows)
-3. The last user message (minus auto-injected wrappers)
+</div>
 
 ---
 
-## Installation
+## Project Overview
 
-### Prerequisites
+`claude-code-session-cleaner` lists and deletes Claude Code CLI session files
+from `~/.claude/projects/`. It is a local cleanup helper for saved sessions and
+can run as either:
 
-- Bash 3.2+ (macOS default works)
-- `jq` ([install](https://jqlang.org/download/))
+- a standalone interactive shell script
+- a Claude Code slash command: `/delete-session`
 
-### Option A — one command
+The tool uses the same practical labels you see in `/resume`, so you can delete
+old sessions by title, recent prompt, project, or UUID prefix without manually
+digging through encoded project directories.
+
+## Features
+
+- Lists sessions newest first for the current project by default.
+- Supports `--all` to scan every Claude Code project.
+- Shows index, modified time, project name, file size, UUID prefix, and label.
+- Uses label priority compatible with `/resume`: custom title, last prompt, then
+  fallback user message.
+- Deletes the selected `.jsonl` file and its sibling `<uuid>/` artifact
+  directory.
+- Refuses to delete sessions modified in the last 10 minutes to avoid removing
+  an active session.
+- Resolves UUID prefixes safely and refuses ambiguous matches.
+- Installs both the shell script and Claude Code slash command with one command.
+
+## Project Structure
+
+```text
+.
+├── commands/
+│   └── delete-session.md      # Claude Code slash command
+├── scripts/
+│   └── delete-session.sh      # Session listing and deletion script
+├── install.sh                 # Installer for ~/.claude/scripts and ~/.claude/commands
+├── LICENSE
+├── README.md
+└── README_CN.md
+```
+
+## Requirements
+
+- macOS shell environment
+- Bash 3.2 or newer
+- `jq`
+- Claude Code session data under `~/.claude/projects/`
+
+Install `jq` on macOS:
+
+```bash
+brew install jq
+```
+
+## Quick Start
+
+Clone the repository and install the script plus slash command:
 
 ```bash
 git clone https://github.com/ihoooohi/claude-code-session-cleaner.git
@@ -56,128 +75,83 @@ cd claude-code-session-cleaner
 ./install.sh
 ```
 
-This copies:
+The installer copies:
 
-- `scripts/delete-session.sh` → `~/.claude/scripts/delete-session.sh`
-- `commands/delete-session.md` → `~/.claude/commands/delete-session.md`
+- `scripts/delete-session.sh` to `~/.claude/scripts/delete-session.sh`
+- `commands/delete-session.md` to `~/.claude/commands/delete-session.md`
 
-It **will not overwrite** existing files unless you pass `--force`.
-
-### Option B — manual
-
-```bash
-cp scripts/delete-session.sh   ~/.claude/scripts/
-cp commands/delete-session.md  ~/.claude/commands/
-chmod +x ~/.claude/scripts/delete-session.sh
-```
-
----
+It will not overwrite existing files unless you pass `--force`.
 
 ## Usage
 
-### From the terminal (interactive)
+Run interactively from a terminal:
 
 ```bash
 ~/.claude/scripts/delete-session.sh
 ```
 
-Default scope is **only the current project** (derived from `$PWD`). The script
-shows a numbered list, then prompts for indexes:
+List sessions without deleting anything:
 
+```bash
+~/.claude/scripts/delete-session.sh list
+~/.claude/scripts/delete-session.sh list fix-v2
+~/.claude/scripts/delete-session.sh --all list
+~/.claude/scripts/delete-session.sh --project /path/to/project list
 ```
+
+Delete by UUID or UUID prefix:
+
+```bash
+~/.claude/scripts/delete-session.sh delete 9c8dbd97
+```
+
+Use it inside Claude Code:
+
+```text
+/delete-session
+/delete-session fix-v2
+/delete-session --all
+/delete-session 9c8dbd97
+```
+
+## Core Flow
+
+1. The script derives the current project from `$PWD`, unless you pass `--all`
+   or `--project`.
+2. It maps the project path to Claude Code's encoded directory format under
+   `~/.claude/projects/`.
+3. It reads only top-level `*.jsonl` session files, not nested artifact files.
+4. It builds labels from session records in this order:
+   `custom-title`, `last-prompt`, then the last non-wrapper user message.
+5. It renders a numbered list for review.
+6. On deletion, it confirms the target, refuses active sessions, removes the
+   main `.jsonl`, and removes the sibling `<uuid>/` artifact directory if it
+   exists.
+
+## Minimal Example
+
+Example list output:
+
+```text
+[  1] 2026-04-24 18:17  EchoCenter           728K  bcf9c007...  Update map labels
+[  2] 2026-04-24 08:02  EchoCenter            24K  34738f62...  Pull the latest repo
+[  3] 2026-04-22 10:07  HERTCERT              31M  9f362cce...  ★ fix-v2-production-stability
+```
+
+Interactive deletion accepts individual indexes and ranges:
+
+```text
 Enter indexes to delete (e.g. '1 3 5' or '1-4'; empty to quit): 2 5-7
 ```
 
-Supports:
+## Safety Notes
 
-- `1 3 5` — individual indexes
-- `1-4` — ranges
-- `1 3-5 9` — mixed
-- Empty input — cancel
-
-After confirmation (`y/N`), each selected file and its sibling `<uuid>/`
-directory are deleted.
-
-### From the terminal (non-interactive)
-
-```bash
-~/.claude/scripts/delete-session.sh list                   # current project
-~/.claude/scripts/delete-session.sh list pattern           # filter by substring
-~/.claude/scripts/delete-session.sh --all list             # every project
-~/.claude/scripts/delete-session.sh --project /path list   # specific project
-~/.claude/scripts/delete-session.sh delete <uuid>...       # delete by uuid (prefix ok)
-```
-
-### From Claude Code
-
-Type `/delete-session` in a conversation:
-
-```
-/delete-session                # list current project, then pick
-/delete-session fix-v2         # filter by keyword
-/delete-session --all          # scan everything
-/delete-session 9c8dbd97       # jump straight to uuid confirmation
-```
-
-Claude lists the candidates, asks you which to delete (`1 3-5`, `除 X 外全部`,
-`all`, etc.), shows a summary, and waits for confirmation before calling the
-script's non-interactive `delete` mode.
-
----
-
-## Safety
-
-**Active-session protection.** Sessions with `mtime < 10 minutes` are refused:
-
-```
-refuse: 01c3a07b-a25b-4aed-9c66-26eb29f64d26 is active (142s ago, < 600s)
-```
-
-The running session updates its `.jsonl` on every message, so it nearly always
-trips this guard. To raise or lower the threshold, edit
-`ACTIVE_THRESHOLD_SEC` at the top of the script.
-
-**Derivative cleanup.** Claude Code stores subagent transcripts, tool results,
-and scoped memory at `~/.claude/projects/<project>/<uuid>/` (a directory with
-the same stem as the main `.jsonl`). When this tool deletes a main session, it
-also removes that sibling directory — otherwise those files would live on as
-orphans.
-
-**UUID prefix disambiguation.** `delete abc12345` refuses if the prefix matches
-zero or multiple sessions. No "it probably means this one" guessing.
-
-**Two-step confirmation in the slash command.** Claude always lists the
-resolved files to you before calling `delete`.
-
----
-
-## Reverse-engineering notes
-
-To make labels match `/resume`, this tool reads Claude Code's session JSONL
-format directly. Three record types matter:
-
-| `type`           | When written                                     | Used as label           |
-| ---------------- | ------------------------------------------------ | ----------------------- |
-| `custom-title`   | Each time you run `/rename`. Multiple records are appended; the most recent wins. | `★ <customTitle>` |
-| `last-prompt`    | On every new user message. Takes precedence for sessions created by recent Claude Code versions. | `<lastPrompt>` |
-| `user`           | Every user message (including auto-injected `<local-command-caveat>` / `<command-name>/clear</command-name>` wrappers). | Fallback: last non-wrapper content |
-
-This matches what `/resume` surfaces in practice (verified across 10+ real
-sessions). If Claude Code changes its storage format, update `custom_title()`,
-`last_prompt()`, and `last_user_message()` in the script.
-
----
-
-## Known limits
-
-- **Can't delete the session you're currently in** — the active-session guard
-  rejects it. Do it from another terminal.
-- **macOS and Linux only.** Uses BSD `stat -f %m` and `date -r`. Not yet tested
-  on other BSDs. Contributions welcome.
-- **No `--older-than 30d`** yet. If you want bulk purge by age, open an issue.
-- **No undo.** This is `rm`, not a trash bin. Confirmation is the safety net.
-
----
+- The active-session guard refuses sessions modified less than 10 minutes ago.
+- `delete <uuid-prefix>` refuses if the prefix matches zero or multiple files.
+- The slash command asks for confirmation before calling the deletion script.
+- Linux is not verified because the script currently uses BSD/macOS `stat` and
+  `date` flags.
+- There is no undo. Deleted files are removed with `rm`.
 
 ## Uninstall
 
@@ -186,14 +160,6 @@ rm ~/.claude/scripts/delete-session.sh
 rm ~/.claude/commands/delete-session.md
 ```
 
----
-
-## Upstream
-
-When Claude Code ships an official delete command, this tool becomes
-redundant — that's the goal. Track progress at
-[anthropics/claude-code#26904](https://github.com/anthropics/claude-code/issues/26904).
-
 ## License
 
-[MIT](./LICENSE).
+This project is released under the [MIT License](./LICENSE).
