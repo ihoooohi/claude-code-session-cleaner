@@ -55,7 +55,10 @@ EOF
 encode_path() { printf '%s' "$1" | sed 's:/:-:g'; }
 
 file_mtime() {
-  stat -f %m "$1" 2>/dev/null || stat -c %Y "$1" 2>/dev/null || printf '0'
+  case "$(uname -s)" in
+    Darwin) stat -f %m "$1" 2>/dev/null ;;
+    *) stat -c %Y "$1" 2>/dev/null ;;
+  esac || printf '0'
 }
 
 format_time() {
@@ -127,11 +130,9 @@ collect_tsv() {
     sort -rn -t "$(printf '\t')" -k1,1
 }
 
-session_label_awk='if ($6 != "") label = "★ " $6; else if ($7 != "") label = $7; else label = $8'
-
 render_list() {
   awk -F'\t' -v dim="$DIM" -v cyan="$CYAN" -v reset="$RESET" '
-    {'"$session_label_awk"'
+    {if ($6 != "") label = "★ " $6; else if ($7 != "") label = $7; else label = $8
      printf "%s[%3d]%s %s  %-18s %6s  %s…  %s\n", cyan, NR, reset, $2, $3, $4, substr($5,1,8), label
     }'
 }
@@ -144,8 +145,8 @@ render_json() {
 }
 
 header() {
-  printf "\n${BOLD}${CYAN}  ◆ Claude Session Cleaner${RESET} ${DIM}v%s${RESET}\n" "$VERSION"
-  printf "${DIM}  Safe space for unfinished conversations.${RESET}\n\n"
+  printf '\n%s%s  ◆ Claude Session Cleaner%s %sv%s%s\n' "$BOLD" "$CYAN" "$RESET" "$DIM" "$VERSION" "$RESET"
+  printf '%s  Safe space for unfinished conversations.%s\n\n' "$DIM" "$RESET"
 }
 
 cmd_list() {
@@ -155,12 +156,17 @@ cmd_list() {
     tsv=$(printf '%s\n' "$tsv" | grep -i -- "$pattern" || true)
   fi
   if [ "$JSON" -eq 1 ]; then printf '%s\n' "$tsv" | awk 'NF' | render_json; return; fi
-  [ -z "$tsv" ] && { echo "No sessions found${pattern:+ matching '$pattern'}."; return; }
+  if [ -z "$tsv" ]; then
+    if [ -n "$pattern" ]; then echo "No sessions found matching '$pattern'."
+    else echo "No sessions found."
+    fi
+    return
+  fi
   header
-  printf "${BOLD}  Sessions${RESET} ${DIM}(newest first)${RESET}\n\n"
+  printf '%s  Sessions%s %s(newest first)%s\n\n' "$BOLD" "$RESET" "$DIM" "$RESET"
   printf '%s\n' "$tsv" | render_list
   total=$(printf '%s\n' "$tsv" | wc -l | tr -d ' ')
-  printf "\n${DIM}  %s session(s) · %s scope${RESET}\n" "$total" "$SCOPE"
+  printf '\n%s  %s session(s) · %s scope%s\n' "$DIM" "$total" "$SCOPE" "$RESET"
 }
 
 count_files() {
@@ -181,10 +187,10 @@ cmd_stats() {
     return
   fi
   header
-  printf "  ${BOLD}%-12s${RESET} ${CYAN}%s${RESET}\n" "Sessions" "$sessions"
-  printf "  ${BOLD}%-12s${RESET} ${CYAN}%s${RESET}\n" "Projects" "$projects"
-  printf "  ${BOLD}%-12s${RESET} ${CYAN}%s${RESET}\n" "Storage" "$storage"
-  printf "  ${BOLD}%-12s${RESET} ${CYAN}%s${RESET}\n" "Trash" "$trash item(s)"
+  printf '  %s%-12s%s %s%s%s\n' "$BOLD" "Sessions" "$RESET" "$CYAN" "$sessions" "$RESET"
+  printf '  %s%-12s%s %s%s%s\n' "$BOLD" "Projects" "$RESET" "$CYAN" "$projects" "$RESET"
+  printf '  %s%-12s%s %s%s%s\n' "$BOLD" "Storage" "$RESET" "$CYAN" "$storage" "$RESET"
+  printf '  %s%-12s%s %s%s%s\n' "$BOLD" "Trash" "$RESET" "$CYAN" "$trash item(s)" "$RESET"
 }
 
 resolve_uuid() {
@@ -224,7 +230,7 @@ trash_session() {
     echo "error: could not move derivative artifacts; transcript restored" >&2
     return 1
   fi
-  printf "${GREEN}trashed:${RESET} %s ${DIM}(restore with: ccsc restore %s)${RESET}\n" "$f" "${uuid:0:8}"
+  printf '%strashed:%s %s %s(restore with: ccsc restore %s)%s\n' "$GREEN" "$RESET" "$f" "$DIM" "${uuid:0:8}" "$RESET"
 }
 
 cmd_trash() {
@@ -241,11 +247,11 @@ list_trash() {
   local item meta count=0
   [ -d "$TRASH_DIR" ] || { echo "Trash is empty."; return; }
   header
-  printf "${BOLD}  Recoverable sessions${RESET}\n\n"
+  printf '%s  Recoverable sessions%s\n\n' "$BOLD" "$RESET"
   for item in "$TRASH_DIR"/*; do
     [ -d "$item" ] || continue; meta="$item/metadata.json"; [ -f "$meta" ] || continue
     count=$((count + 1))
-    printf "${CYAN}[%3d]${RESET} %s…  %-20s  %s\n" "$count" \
+    printf '%s[%3d]%s %s…  %-20s  %s\n' "$CYAN" "$count" "$RESET" \
       "$(jq -r '.uuid[0:8]' "$meta")" "$(jq -r '.trashed_at' "$meta")" \
       "$(basename "$(dirname "$(jq -r '.original_path' "$meta")")")"
   done
@@ -280,7 +286,7 @@ cmd_restore() {
   mv "$item/session.jsonl" "$original"
   [ -d "$item/artifacts" ] && mv "$item/artifacts" "$stem"
   rm -rf "$item"
-  printf "${GREEN}restored:${RESET} %s\n" "$original"
+  printf '%srestored:%s %s\n' "$GREEN" "$RESET" "$original"
 }
 
 cmd_purge() {
@@ -298,10 +304,10 @@ cmd_interactive() {
   local tsv total selection expanded="" tok a b i n line uuid confirm
   tsv=$(collect_tsv); [ -n "$tsv" ] || { echo "No sessions found."; return; }
   header
-  printf "${BOLD}  Sessions${RESET} ${DIM}(select one or more to move to trash)${RESET}\n\n"
+  printf '%s  Sessions%s %s(select one or more to move to trash)%s\n\n' "$BOLD" "$RESET" "$DIM" "$RESET"
   printf '%s\n' "$tsv" | render_list
   total=$(printf '%s\n' "$tsv" | wc -l | tr -d ' ')
-  printf "\n${BOLD}Select${RESET} ${DIM}(1 3 5, 2-6, or Enter to cancel)${RESET}: "
+  printf '\n%sSelect%s %s(1 3 5, 2-6, or Enter to cancel)%s: ' "$BOLD" "$RESET" "$DIM" "$RESET"
   read -r selection
   [ -z "$selection" ] && { echo "Cancelled."; return; }
   for tok in $selection; do
@@ -312,11 +318,14 @@ cmd_interactive() {
     else echo "Skipping invalid selection: $tok" >&2; fi
   done
   [ -n "$expanded" ] || { echo "Nothing selected."; return; }
-  printf "\n${YELLOW}Move selected sessions to recoverable trash?${RESET} [y/N] "
+  printf '\n%sMove selected sessions to recoverable trash?%s [y/N] ' "$YELLOW" "$RESET"
   read -r confirm
   case "$confirm" in y|Y|yes|YES) ;; *) echo "Cancelled."; return ;; esac
   for n in $expanded; do
-    [ "$n" -ge 1 ] && [ "$n" -le "$total" ] || { echo "Skipping out-of-range: $n"; continue; }
+    if [ "$n" -lt 1 ] || [ "$n" -gt "$total" ]; then
+      echo "Skipping out-of-range: $n"
+      continue
+    fi
     line=$(printf '%s\n' "$tsv" | sed -n "${n}p"); uuid=$(printf '%s' "$line" | cut -f5)
     cmd_trash "$uuid" || true
   done
