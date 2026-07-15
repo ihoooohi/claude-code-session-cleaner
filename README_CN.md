@@ -7,6 +7,7 @@
 **一个安全、可恢复的 Claude Code 终端会话管理器。**
 
 [![CI](https://github.com/ihoooohi/claude-code-session-cleaner/actions/workflows/ci.yml/badge.svg)](https://github.com/ihoooohi/claude-code-session-cleaner/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/ihoooohi/claude-code-session-cleaner?color=8b5cf6)](https://github.com/ihoooohi/claude-code-session-cleaner/releases/latest)
 [![GitHub stars](https://img.shields.io/github/stars/ihoooohi/claude-code-session-cleaner?style=flat&color=a78bfa)](https://github.com/ihoooohi/claude-code-session-cleaner/stargazers)
 [![License: MIT](https://img.shields.io/badge/License-MIT-a78bfa.svg)](./LICENSE)
 [![Bash 3.2+](https://img.shields.io/badge/Bash-3.2%2B-4EAA25?logo=gnubash&logoColor=white)](https://www.gnu.org/software/bash/)
