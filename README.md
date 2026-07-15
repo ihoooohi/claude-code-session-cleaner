@@ -1,9 +1,15 @@
 <div align="center">
 
-# claude-code-session-cleaner
+<img src="./assets/hero.svg" alt="Claude Session Cleaner — Browse. Reclaim. Restore." width="100%" />
 
-[![License](https://img.shields.io/badge/License-MIT-lightgrey.svg)](./LICENSE)
-[![Language](https://img.shields.io/badge/language-Bash-4EAA25.svg)](https://www.gnu.org/software/bash/)
+# Claude Session Cleaner
+
+[![CI](https://github.com/ihoooohi/claude-code-session-cleaner/actions/workflows/ci.yml/badge.svg)](https://github.com/ihoooohi/claude-code-session-cleaner/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-a78bfa.svg)](./LICENSE)
+[![Shell: Bash](https://img.shields.io/badge/Shell-Bash-4EAA25?logo=gnubash&logoColor=white)](https://www.gnu.org/software/bash/)
+[![macOS + Linux](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-64748b)](#requirements)
+
+**A safe, recoverable session manager for Claude Code.**
 
 [**English**](./README.md) | [**中文**](./README_CN.md)
 
@@ -11,155 +17,122 @@
 
 ---
 
-## Project Overview
+## Overview
 
-`claude-code-session-cleaner` lists and deletes Claude Code CLI session files
-from `~/.claude/projects/`. It is a local cleanup helper for saved sessions and
-can run as either:
+Claude Code stores every conversation as a JSONL transcript under `~/.claude/projects`, but managing those files by hand is error-prone. Claude Session Cleaner (`ccsc`) turns that storage into a polished terminal experience: browse sessions using the same labels as `/resume`, reclaim space without touching active work, and restore anything moved by mistake.
 
-- a standalone interactive shell script
-- a Claude Code slash command: `/delete-session`
-
-The tool uses the same practical labels you see in `/resume`, so you can delete
-old sessions by title, recent prompt, project, or UUID prefix without manually
-digging through encoded project directories.
+It works both as a standalone CLI and as a conversational `/delete-session` command inside Claude Code.
 
 ## Features
 
-- Lists sessions newest first for the current project by default.
-- Supports `--all` to scan every Claude Code project.
-- Shows index, modified time, project name, file size, UUID prefix, and label.
-- Uses label priority compatible with `/resume`: custom title, last prompt, then
-  fallback user message.
-- Deletes the selected `.jsonl` file and its sibling `<uuid>/` artifact
-  directory.
-- Refuses to delete sessions modified in the last 10 minutes to avoid removing
-  an active session.
-- Resolves UUID prefixes safely and refuses ambiguous matches.
-- Installs both the shell script and Claude Code slash command with one command.
+- **Recoverable by default** — sessions go to a private local trash, never straight to `rm`.
+- **Complete cleanup** — moves the transcript and its sibling artifacts (`subagents`, tool results, and memory) together.
+- **Active-session guard** — refuses sessions modified in the last 10 minutes.
+- **Familiar labels** — resolves `/rename` titles, latest prompts, and fallback user messages in the same priority as `/resume`.
+- **Fast navigation** — current-project scope by default, with global, path, keyword, and UUID-prefix lookup.
+- **Automation friendly** — stable non-interactive commands and structured `--json` output.
+- **Portable and small** — Bash 3.2 compatible; tested on macOS and Linux with no framework or build step.
 
-## Project Structure
+## Project structure
 
 ```text
 .
-├── commands/
-│   └── delete-session.md      # Claude Code slash command
-├── scripts/
-│   └── delete-session.sh      # Session listing and deletion script
-├── install.sh                 # Installer for ~/.claude/scripts and ~/.claude/commands
-├── LICENSE
-├── README.md
-└── README_CN.md
+├── scripts/delete-session.sh   # CLI, storage parser, trash engine, terminal UI
+├── commands/delete-session.md  # Claude Code slash-command workflow
+├── tests/test.sh               # isolated filesystem integration tests
+├── assets/hero.svg             # GitHub project artwork
+├── .github/workflows/ci.yml    # macOS + Linux CI and ShellCheck
+├── install.sh                  # idempotent installer
+└── uninstall.sh                # safe uninstaller (keeps recoverable trash)
 ```
 
 ## Requirements
 
-- macOS shell environment
-- Bash 3.2 or newer
-- `jq`
-- Claude Code session data under `~/.claude/projects/`
+- macOS or Linux
+- Bash 3.2+
+- [`jq`](https://jqlang.github.io/jq/download/)
 
-Install `jq` on macOS:
-
-```bash
-brew install jq
-```
-
-## Quick Start
-
-Clone the repository and install the script plus slash command:
+## Quick start
 
 ```bash
 git clone https://github.com/ihoooohi/claude-code-session-cleaner.git
 cd claude-code-session-cleaner
 ./install.sh
+ccsc
 ```
 
-The installer copies:
+The installer adds `ccsc` to `~/.local/bin`, and installs the compatibility script and `/delete-session` command under `~/.claude`. It never replaces a different existing file unless `--force` is supplied.
 
-- `scripts/delete-session.sh` to `~/.claude/scripts/delete-session.sh`
-- `commands/delete-session.md` to `~/.claude/commands/delete-session.md`
-
-It will not overwrite existing files unless you pass `--force`.
-
-## Usage
-
-Run interactively from a terminal:
+If `~/.local/bin` is not on your `PATH`, add it in your shell profile:
 
 ```bash
-~/.claude/scripts/delete-session.sh
+export PATH="$HOME/.local/bin:$PATH"
 ```
 
-List sessions without deleting anything:
+## How it works
+
+```mermaid
+flowchart LR
+    A["Scan project JSONL"] --> B["Resolve /resume label"]
+    B --> C["Select by index or UUID"]
+    C --> D{"Modified < 10 min?"}
+    D -- Yes --> E["Refuse active session"]
+    D -- No --> F["Move transcript + artifacts"]
+    F --> G["Recoverable local trash"]
+    G -->|restore| H["Original project path"]
+    G -->|purge| I["Permanent deletion"]
+```
+
+Each trash entry contains the original transcript, derivative artifact directory, and a small metadata file recording its original path. Restore checks for destination conflicts before rebuilding the session exactly where Claude Code expects it.
+
+## Minimal examples
 
 ```bash
-~/.claude/scripts/delete-session.sh list
-~/.claude/scripts/delete-session.sh list fix-v2
-~/.claude/scripts/delete-session.sh --all list
-~/.claude/scripts/delete-session.sh --project /path/to/project list
+# Browse the current project in the interactive terminal UI
+ccsc
+
+# Search every project, or consume results as JSON
+ccsc --all list "release"
+ccsc --all --json list | jq '.[].uuid'
+
+# Inspect storage, recover a session, or permanently empty trash
+ccsc stats
+ccsc restore                 # list recoverable sessions
+ccsc restore 9f362cce
+ccsc purge --all             # irreversible
 ```
 
-Delete by UUID or UUID prefix:
+Inside Claude Code, run `/delete-session`. The command lists candidates, interprets selections such as `1 3-5` or `all except 2`, and always asks for confirmation before moving anything.
+
+## Safety model
+
+| Risk | Guardrail |
+|---|---|
+| Deleting the current conversation | Modification-time guard rejects recently active sessions |
+| Leaving orphaned agent/tool data | Transcript and same-UUID artifact directory move as one unit |
+| Ambiguous short UUID | Zero or multiple matches are refused |
+| Accidental deletion | `trash` is recoverable; permanent deletion is a separate `purge` command |
+| Restore overwrite | Existing destinations are never replaced |
+
+Set `CCSC_ACTIVE_THRESHOLD_SEC` to customize the guard. Set `NO_COLOR=1` for plain output. `CLAUDE_HOME` and `CCSC_PROJECTS_DIR` make the storage root configurable for testing and nonstandard installations.
+
+## Development
 
 ```bash
-~/.claude/scripts/delete-session.sh delete 9c8dbd97
+bash tests/test.sh
+shellcheck scripts/delete-session.sh install.sh uninstall.sh tests/test.sh
 ```
 
-Use it inside Claude Code:
+The tests run against an isolated temporary Claude home, so they never inspect or mutate your real sessions. Contributions are welcome; see the pull request safety checklist.
 
-```text
-/delete-session
-/delete-session fix-v2
-/delete-session --all
-/delete-session 9c8dbd97
-```
+## Roadmap
 
-## Core Flow
+- Age and size based cleanup policies (`--older-than`, `--larger-than`)
+- Optional desktop trash integration
+- Storage trends and per-project insights
 
-1. The script derives the current project from `$PWD`, unless you pass `--all`
-   or `--project`.
-2. It maps the project path to Claude Code's encoded directory format under
-   `~/.claude/projects/`.
-3. It reads only top-level `*.jsonl` session files, not nested artifact files.
-4. It builds labels from session records in this order:
-   `custom-title`, `last-prompt`, then the last non-wrapper user message.
-5. It renders a numbered list for review.
-6. On deletion, it confirms the target, refuses active sessions, removes the
-   main `.jsonl`, and removes the sibling `<uuid>/` artifact directory if it
-   exists.
-
-## Minimal Example
-
-Example list output:
-
-```text
-[  1] 2026-04-24 18:17  EchoCenter           728K  bcf9c007...  Update map labels
-[  2] 2026-04-24 08:02  EchoCenter            24K  34738f62...  Pull the latest repo
-[  3] 2026-04-22 10:07  HERTCERT              31M  9f362cce...  ★ fix-v2-production-stability
-```
-
-Interactive deletion accepts individual indexes and ranges:
-
-```text
-Enter indexes to delete (e.g. '1 3 5' or '1-4'; empty to quit): 2 5-7
-```
-
-## Safety Notes
-
-- The active-session guard refuses sessions modified less than 10 minutes ago.
-- `delete <uuid-prefix>` refuses if the prefix matches zero or multiple files.
-- The slash command asks for confirmation before calling the deletion script.
-- Linux is not verified because the script currently uses BSD/macOS `stat` and
-  `date` flags.
-- There is no undo. Deleted files are removed with `rm`.
-
-## Uninstall
-
-```bash
-rm ~/.claude/scripts/delete-session.sh
-rm ~/.claude/commands/delete-session.md
-```
+This project began as a stopgap while native session deletion is discussed in [anthropics/claude-code#26904](https://github.com/anthropics/claude-code/issues/26904). Even if the native command lands, the recoverable storage browser and diagnostics remain useful.
 
 ## License
 
-This project is released under the [MIT License](./LICENSE).
+Released under the [MIT License](./LICENSE).

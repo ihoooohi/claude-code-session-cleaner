@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="480" viewBox="0 0 1200 480" role="img" aria-labelledby="title desc">
+  <title id="title">Claude Session Cleaner</title>
+  <desc id="desc">A polished terminal session manager with recoverable trash</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#090d18"/><stop offset=".52" stop-color="#11182a"/><stop offset="1" stop-color="#17122b"/>
+    </linearGradient>
+    <radialGradient id="glow"><stop stop-color="#8b5cf6" stop-opacity=".38"/><stop offset="1" stop-color="#8b5cf6" stop-opacity="0"/></radialGradient>
+    <filter id="shadow"><feDropShadow dx="0" dy="18" stdDeviation="25" flood-color="#000" flood-opacity=".5"/></filter>
+  </defs>
+  <rect width="1200" height="480" rx="28" fill="url(#bg)"/>
+  <circle cx="1080" cy="40" r="330" fill="url(#glow)"/>
+  <circle cx="90" cy="465" r="250" fill="url(#glow)" opacity=".45"/>
+  <g opacity=".2" stroke="#8b5cf6"><path d="M0 80h1200M0 160h1200M0 240h1200M0 320h1200M0 400h1200"/><path d="M120 0v480M240 0v480M360 0v480M480 0v480M600 0v480M720 0v480M840 0v480M960 0v480M1080 0v480"/></g>
+  <g transform="translate(82 88)">
+    <rect width="72" height="72" rx="20" fill="#8b5cf6"/>
+    <path d="M23 23h26L38 36l11 13H23l11-13z" fill="#fff"/>
+    <text x="0" y="128" fill="#f8fafc" font-family="ui-sans-serif,system-ui,sans-serif" font-size="48" font-weight="750">Claude Session</text>
+    <text x="0" y="184" fill="#f8fafc" font-family="ui-sans-serif,system-ui,sans-serif" font-size="48" font-weight="750">Cleaner</text>
+    <text x="2" y="224" fill="#aab4ca" font-family="ui-sans-serif,system-ui,sans-serif" font-size="20">Browse. Reclaim. Restore.</text>
+    <g transform="translate(0 260)" font-family="ui-monospace,SFMono-Regular,monospace" font-size="14">
+      <rect width="148" height="34" rx="17" fill="#221d3b" stroke="#6d4bd1"/><text x="18" y="22" fill="#c4b5fd">◆ recoverable</text>
+      <rect x="162" width="112" height="34" rx="17" fill="#111c2b" stroke="#334155"/><text x="178" y="22" fill="#b6c2d9">mac + linux</text>
+    </g>
+  </g>
+  <g transform="translate(565 65)" filter="url(#shadow)">
+    <rect width="560" height="350" rx="18" fill="#080b13" stroke="#30384e"/>
+    <path d="M0 48h560" stroke="#252b3b"/>
+    <circle cx="25" cy="24" r="6" fill="#fb7185"/><circle cx="46" cy="24" r="6" fill="#fbbf24"/><circle cx="67" cy="24" r="6" fill="#4ade80"/>
+    <text x="280" y="29" text-anchor="middle" fill="#667085" font-family="ui-monospace,SFMono-Regular,monospace" font-size="12">ccsc</text>
+    <g font-family="ui-monospace,SFMono-Regular,monospace">
+      <text x="27" y="86" fill="#a78bfa" font-size="15" font-weight="bold">◆ Claude Session Cleaner</text>
+      <text x="258" y="86" fill="#64748b" font-size="12">v2.0.0</text>
+      <text x="27" y="112" fill="#64748b" font-size="12">Safe space for unfinished conversations.</text>
+      <text x="27" y="151" fill="#f1f5f9" font-size="13" font-weight="bold">Sessions</text><text x="93" y="151" fill="#64748b" font-size="12">(newest first)</text>
+      <text x="27" y="183" fill="#8b5cf6" font-size="12">[  1]</text><text x="82" y="183" fill="#aab4ca" font-size="12">Jul 15  portfolio</text><text x="253" y="183" fill="#cbd5e1" font-size="12">★ polish the release</text>
+      <text x="27" y="213" fill="#8b5cf6" font-size="12">[  2]</text><text x="82" y="213" fill="#aab4ca" font-size="12">Jul 14  compiler</text><text x="253" y="213" fill="#cbd5e1" font-size="12">fix parser edge case</text>
+      <text x="27" y="243" fill="#8b5cf6" font-size="12">[  3]</text><text x="82" y="243" fill="#aab4ca" font-size="12">Jul 12  notes</text><text x="253" y="243" fill="#cbd5e1" font-size="12">explore storage model</text>
+      <text x="27" y="286" fill="#f8fafc" font-size="12" font-weight="bold">Select</text><text x="78" y="286" fill="#64748b" font-size="12">(1 3 5, 2-6):</text><text x="192" y="286" fill="#c4b5fd" font-size="12">1 3</text>
+      <rect x="25" y="307" width="510" height="25" rx="6" fill="#171329"/>
+      <text x="38" y="324" fill="#c4b5fd" font-size="11">Move selected sessions to recoverable trash? [y/N]</text>
+    </g>
+  </g>
+</svg>

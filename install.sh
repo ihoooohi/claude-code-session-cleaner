@@ -1,36 +1,40 @@
 #!/usr/bin/env bash
-# install.sh — install delete-session.sh + slash command into ~/.claude/
-#
-# Idempotent. Will not overwrite files unless --force.
-# After install, the script lives at ~/.claude/scripts/delete-session.sh
-# and the slash command is available as `/delete-session` inside Claude Code.
+# Install ccsc, its compatibility script, and the Claude Code slash command.
 
 set -eu
 
 FORCE=0
+BIN_DIR="${HOME}/.local/bin"
 for arg in "$@"; do
   case "$arg" in
     --force|-f) FORCE=1 ;;
-    --help|-h)  sed -n '2,7p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
-    *)          echo "unknown flag: $arg" >&2; exit 2 ;;
+    --bin-dir=*) BIN_DIR="${arg#*=}" ;;
+    --help|-h)
+      echo "usage: ./install.sh [--force] [--bin-dir=/path]"
+      exit 0 ;;
+    *) echo "unknown option: $arg" >&2; exit 2 ;;
   esac
 done
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
+DEST_BIN="$BIN_DIR/ccsc"
 DEST_SCRIPT="$HOME/.claude/scripts/delete-session.sh"
 DEST_CMD="$HOME/.claude/commands/delete-session.md"
 
-command -v jq >/dev/null || { echo "error: jq is required. Install via 'brew install jq' or your package manager." >&2; exit 1; }
+command -v jq >/dev/null || {
+  echo "error: jq is required (brew install jq / apt-get install jq)" >&2
+  exit 1
+}
 
-mkdir -p "$(dirname "$DEST_SCRIPT")" "$(dirname "$DEST_CMD")"
+mkdir -p "$BIN_DIR" "$(dirname "$DEST_SCRIPT")" "$(dirname "$DEST_CMD")"
 
 copy_file() {
   local src="$1" dst="$2"
   if [ -e "$dst" ] && [ "$FORCE" -ne 1 ]; then
     if cmp -s "$src" "$dst"; then
-      echo "✓ $dst (already up to date)"
+      echo "✓ $dst (up to date)"
     else
-      echo "✗ $dst exists and differs from source. Re-run with --force to overwrite." >&2
+      echo "✗ $dst exists. Re-run with --force to replace it." >&2
       return 1
     fi
   else
@@ -39,11 +43,18 @@ copy_file() {
   fi
 }
 
+copy_file "$HERE/scripts/delete-session.sh" "$DEST_BIN"
+chmod +x "$DEST_BIN"
 copy_file "$HERE/scripts/delete-session.sh" "$DEST_SCRIPT"
 chmod +x "$DEST_SCRIPT"
 copy_file "$HERE/commands/delete-session.md" "$DEST_CMD"
 
 echo ""
-echo "Installed. Try it:"
-echo "  Terminal:     ~/.claude/scripts/delete-session.sh list"
-echo "  Claude Code:  /delete-session"
+echo "Installed ccsc. Try:"
+echo "  ccsc                 # interactive browser"
+echo "  ccsc stats           # storage overview"
+echo "  /delete-session      # inside Claude Code"
+case ":$PATH:" in
+  *":$BIN_DIR:"*) ;;
+  *) echo ""; echo "Note: add $BIN_DIR to PATH to use the ccsc command." ;;
+esac

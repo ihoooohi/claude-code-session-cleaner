@@ -1,0 +1,33 @@
+name: Bug report
+description: Report a reproducible problem with ccsc
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for helping make session cleanup safer.
+  - type: input
+    id: version
+    attributes:
+      label: ccsc version
+      placeholder: Output of ccsc --version
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options: [macOS, Linux, Other]
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant output
+      render: shell
