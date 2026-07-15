@@ -48,6 +48,11 @@ assert_contains "$out" "Sessions" "stats output"
 assert_contains "$out" "2" "stats session count"
 ok "stats summarizes storage"
 
+out=$("$CCSC" doctor)
+assert_contains "$out" "Ready." "doctor ready state"
+assert_contains "$out" "Session store" "doctor session store check"
+ok "doctor validates the local environment"
+
 out=$("$CCSC" trash "${UUID1:0:8}")
 assert_contains "$out" "trashed:" "trash confirmation"
 [ ! -e "$SESSIONS/$UUID1.jsonl" ] || fail "session should leave projects dir"
@@ -55,16 +60,34 @@ assert_contains "$out" "trashed:" "trash confirmation"
 [ -n "$(find "$CLAUDE_HOME/session-cleaner-trash" -name metadata.json -print -quit)" ] || fail "trash metadata"
 ok "trash moves the transcript and derivative artifacts"
 
+mkdir -p "$SESSIONS/$UUID1"
+if "$CCSC" restore "${UUID1:0:8}" >"$TMP/out" 2>"$TMP/err"; then fail "restore should refuse an artifact conflict"; fi
+assert_contains "$(cat "$TMP/err")" "artifact destination already exists" "restore conflict message"
+[ ! -e "$SESSIONS/$UUID1.jsonl" ] || fail "conflicted restore must keep transcript in trash"
+rm -rf "$SESSIONS/$UUID1"
 out=$("$CCSC" restore "${UUID1:0:8}")
 assert_contains "$out" "restored:" "restore confirmation"
 [ -f "$SESSIONS/$UUID1.jsonl" ] || fail "session should be restored"
 [ -f "$SESSIONS/$UUID1/subagents/result.txt" ] || fail "artifacts should be restored"
-ok "restore reconstructs the original session"
+ok "restore refuses conflicts and reconstructs the original session"
 
 export CCSC_ACTIVE_THRESHOLD_SEC=999999999
 if "$CCSC" trash "${UUID2:0:8}" >"$TMP/out" 2>"$TMP/err"; then fail "active guard should reject"; fi
 assert_contains "$(cat "$TMP/err")" "is active" "active guard message"
 ok "active sessions are protected"
+
+export CCSC_ACTIVE_THRESHOLD_SEC=0
+out=$("$CCSC" --project "$PROJECT" clean --older-than 1d)
+assert_contains "$out" "Preview only" "clean defaults to preview"
+[ -f "$SESSIONS/$UUID1.jsonl" ] && [ -f "$SESSIONS/$UUID2.jsonl" ] || fail "preview must not move sessions"
+out=$("$CCSC" --project "$PROJECT" --json clean --older-than 1d)
+[ "$(printf '%s' "$out" | jq length)" -eq 2 ] || fail "clean JSON preview count"
+if "$CCSC" --project "$PROJECT" clean --older-than yesterday >"$TMP/out" 2>"$TMP/err"; then fail "invalid duration should fail"; fi
+assert_contains "$(cat "$TMP/err")" "invalid duration" "invalid duration message"
+out=$("$CCSC" --project "$PROJECT" clean --older-than 1d --yes)
+assert_contains "$out" "trashed:" "clean execution output"
+[ ! -e "$SESSIONS/$UUID1.jsonl" ] && [ ! -e "$SESSIONS/$UUID2.jsonl" ] || fail "clean --yes should move candidates"
+ok "age-based cleanup previews before moving sessions"
 
 INSTALL_HOME="$TMP/install-home"
 mkdir -p "$INSTALL_HOME"

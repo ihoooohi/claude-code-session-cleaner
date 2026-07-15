@@ -13,6 +13,8 @@ allowed-tools: Bash(~/.claude/scripts/delete-session.sh:*)
 | 空 | 执行 `list`，展示当前项目会话 |
 | `--all` | 执行 `--all list` |
 | `stats` / `统计` | 执行 `stats` |
+| `doctor` / `诊断` | 执行 `doctor`，检查本地环境 |
+| `clean 30d` / `清理 30 天前` | 执行 `clean --older-than 30d`，只展示预览 |
 | `restore` / `恢复` | 执行 `restore`，展示回收站 |
 | 普通文本 | 执行 `list <文本>` 过滤 |
 | 8 位以上十六进制 UUID 前缀 | 定位该会话并进入确认 |
@@ -47,6 +49,16 @@ allowed-tools: Bash(~/.claude/scripts/delete-session.sh:*)
 ```
 
 `purge` 是永久删除。除非用户明确说“永久删除/清空回收站”，不要调用。
+
+## 按时间批量整理
+
+当用户要求清理一段时间以前的会话时，先调用不带 `--yes` 的预览：
+
+```bash
+~/.claude/scripts/delete-session.sh --all clean --older-than 30d
+```
+
+完整转发候选清单并再次确认。只有用户明确确认后，才用完全相同的范围与时间参数追加 `--yes`。不要自行扩大范围，也不要跳过预览。
 
 ## 安全约束
 

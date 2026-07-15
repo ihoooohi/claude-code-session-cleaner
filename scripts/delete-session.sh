@@ -4,7 +4,7 @@
 
 set -u
 
-VERSION="2.0.0"
+VERSION="2.1.0"
 CLAUDE_HOME="${CLAUDE_HOME:-$HOME/.claude}"
 PROJECTS_DIR="${CCSC_PROJECTS_DIR:-$CLAUDE_HOME/projects}"
 TRASH_DIR="${CCSC_TRASH_DIR:-$CLAUDE_HOME/session-cleaner-trash}"
@@ -14,14 +14,12 @@ PROJECT_PATH="$PWD"
 JSON=0
 NO_COLOR="${NO_COLOR:+1}"
 
-command -v jq >/dev/null || { echo "error: jq is required" >&2; exit 1; }
-
 is_tty() { [ -t 1 ] || [ "${FORCE_COLOR:-0}" = "1" ]; }
 if is_tty && [ -z "$NO_COLOR" ]; then
   BOLD='\033[1m'; DIM='\033[2m'; CYAN='\033[36m'; GREEN='\033[32m'
-  YELLOW='\033[33m'; RESET='\033[0m'
+  YELLOW='\033[33m'; RED='\033[31m'; RESET='\033[0m'
 else
-  BOLD=''; DIM=''; CYAN=''; GREEN=''; YELLOW=''; RESET=''
+  BOLD=''; DIM=''; CYAN=''; GREEN=''; YELLOW=''; RED=''; RESET=''
 fi
 
 usage() {
@@ -29,18 +27,19 @@ usage() {
 ccsc — safely manage Claude Code sessions
 
 Usage:
-  delete-session.sh [options]                  interactive session browser
-  delete-session.sh [options] list [pattern]   list sessions
-  delete-session.sh [options] stats            show storage overview
-  delete-session.sh trash <uuid>...            move sessions to the trash
-  delete-session.sh delete <uuid>...           alias for `trash` (backward compatible)
-  delete-session.sh restore [uuid]              list trash or restore one session
-  delete-session.sh purge <uuid>|--all          permanently empty trash entries
+  ccsc [options]                         interactive session browser
+  ccsc [options] list [pattern]          list sessions
+  ccsc [options] stats                   show storage overview
+  ccsc doctor                            diagnose the local environment
+  ccsc [options] clean --older-than 30d  preview an age-based cleanup
+  ccsc trash <uuid>...                   move sessions to the trash
+  ccsc restore [uuid]                    list trash or restore one session
+  ccsc purge <uuid>|--all                permanently empty trash entries
 
 Options:
   -a, --all              include every project
   -p, --project <path>   inspect a specific project
-      --json             machine-readable output (list/stats)
+      --json             machine-readable output (list/stats/clean preview)
       --no-color         disable ANSI colors
   -h, --help             show help
   -v, --version          show version
@@ -50,6 +49,21 @@ Environment:
   CCSC_ACTIVE_THRESHOLD_SEC  active-session guard (default: 600)
   NO_COLOR                    disable ANSI colors
 EOF
+}
+
+require_jq() {
+  command -v jq >/dev/null || {
+    echo "error: jq is required. Run 'ccsc doctor' for setup guidance." >&2
+    return 1
+  }
+}
+
+validate_config() {
+  case "$ACTIVE_THRESHOLD_SEC" in
+    ''|*[!0-9]*)
+      echo "error: CCSC_ACTIVE_THRESHOLD_SEC must be a non-negative integer" >&2
+      return 2 ;;
+  esac
 }
 
 encode_path() { printf '%s' "$1" | sed 's:/:-:g'; }
@@ -131,9 +145,11 @@ collect_tsv() {
 }
 
 render_list() {
-  awk -F'\t' -v dim="$DIM" -v cyan="$CYAN" -v reset="$RESET" '
+  awk -F'\t' -v cyan="$CYAN" -v yellow="$YELLOW" -v reset="$RESET" \
+    -v now="$(date +%s)" -v threshold="$ACTIVE_THRESHOLD_SEC" '
     {if ($6 != "") label = "★ " $6; else if ($7 != "") label = $7; else label = $8
-     printf "%s[%3d]%s %s  %-18s %6s  %s…  %s\n", cyan, NR, reset, $2, $3, $4, substr($5,1,8), label
+     status = ((now - $1) < threshold) ? yellow "  ● active" reset : ""
+     printf "%s[%3d]%s %s  %-18s %6s  %s…  %s%s\n", cyan, NR, reset, $2, $3, $4, substr($5,1,8), label, status
     }'
 }
 
@@ -193,6 +209,135 @@ cmd_stats() {
   printf '  %s%-12s%s %s%s%s\n' "$BOLD" "Trash" "$RESET" "$CYAN" "$trash item(s)" "$RESET"
 }
 
+doctor_row() {
+  local state="$1" label="$2" detail="$3" icon color
+  case "$state" in
+    ok) icon="✓"; color="$GREEN" ;;
+    warn) icon="!"; color="$YELLOW" ;;
+    *) icon="✗"; color="$RED" ;;
+  esac
+  printf '  %s%s%s  %-16s %s\n' "$color" "$icon" "$RESET" "$label" "$detail"
+}
+
+cmd_doctor() {
+  local errors=0 os bash_version jq_version sessions trash parent
+  header
+  printf '%s  Environment check%s\n\n' "$BOLD" "$RESET"
+
+  os=$(uname -s)
+  case "$os" in
+    Darwin|Linux) doctor_row ok "Platform" "$os" ;;
+    *) doctor_row error "Platform" "$os (unsupported)"; errors=$((errors + 1)) ;;
+  esac
+
+  bash_version="${BASH_VERSION:-unknown}"
+  if [ "${BASH_VERSINFO[0]:-0}" -ge 3 ]; then
+    doctor_row ok "Bash" "$bash_version"
+  else
+    doctor_row error "Bash" "$bash_version (3.2+ required)"
+    errors=$((errors + 1))
+  fi
+
+  if command -v jq >/dev/null; then
+    jq_version=$(jq --version 2>/dev/null || echo unknown)
+    doctor_row ok "jq" "$jq_version"
+  else
+    doctor_row error "jq" "missing — install with brew install jq / apt install jq"
+    errors=$((errors + 1))
+  fi
+
+  if [ -d "$PROJECTS_DIR" ]; then
+    sessions=$(count_files "$PROJECTS_DIR")
+    doctor_row ok "Session store" "$sessions session(s) at $PROJECTS_DIR"
+  else
+    doctor_row warn "Session store" "not found at $PROJECTS_DIR"
+  fi
+
+  if [ -d "$CLAUDE_HOME" ]; then parent="$CLAUDE_HOME"; else parent=$(dirname "$CLAUDE_HOME"); fi
+  if [ -w "$parent" ]; then
+    doctor_row ok "Write access" "$parent"
+  else
+    doctor_row error "Write access" "$parent is not writable"
+    errors=$((errors + 1))
+  fi
+
+  trash=$(find "$TRASH_DIR" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')
+  doctor_row ok "Recovery trash" "$trash recoverable item(s)"
+
+  case "$ACTIVE_THRESHOLD_SEC" in
+    ''|*[!0-9]*)
+      doctor_row error "Active guard" "invalid value: $ACTIVE_THRESHOLD_SEC"
+      errors=$((errors + 1)) ;;
+    *) doctor_row ok "Active guard" "${ACTIVE_THRESHOLD_SEC}s" ;;
+  esac
+
+  printf '\n'
+  if [ "$errors" -eq 0 ]; then
+    printf '  %s%sReady.%s ccsc can safely manage sessions on this machine.\n' "$BOLD" "$GREEN" "$RESET"
+  else
+    printf '  %s%s%s issue(s) need attention.%s\n' "$BOLD" "$RED" "$errors" "$RESET"
+    return 1
+  fi
+}
+
+parse_duration() {
+  local value="$1" number multiplier
+  case "$value" in
+    *d) number="${value%d}"; multiplier=86400 ;;
+    *h) number="${value%h}"; multiplier=3600 ;;
+    *m) number="${value%m}"; multiplier=60 ;;
+    *) echo "invalid duration: $value (use 30d, 12h, or 90m)" >&2; return 2 ;;
+  esac
+  case "$number" in ''|*[!0-9]*) echo "invalid duration: $value" >&2; return 2 ;; esac
+  [ "$number" -gt 0 ] || { echo "duration must be greater than zero" >&2; return 2; }
+  printf '%s' "$((number * multiplier))"
+}
+
+cmd_clean() {
+  local older_than="" yes=0 seconds cutoff tsv candidates total line path failed=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --older-than)
+        [ $# -ge 2 ] || { echo "--older-than needs a duration" >&2; return 2; }
+        older_than="$2"; shift 2 ;;
+      --yes|-y) yes=1; shift ;;
+      *) echo "unknown clean option: $1" >&2; return 2 ;;
+    esac
+  done
+  [ -n "$older_than" ] || { echo "usage: ccsc clean --older-than <30d|12h|90m> [--yes]" >&2; return 2; }
+  seconds=$(parse_duration "$older_than") || return
+  cutoff=$(($(date +%s) - seconds))
+  tsv=$(collect_tsv)
+  candidates=$(printf '%s\n' "$tsv" | awk -F'\t' -v cutoff="$cutoff" 'NF && $1 <= cutoff')
+
+  if [ "$JSON" -eq 1 ]; then
+    [ "$yes" -eq 0 ] || { echo "--json cannot be combined with clean --yes" >&2; return 2; }
+    printf '%s\n' "$candidates" | awk 'NF' | render_json
+    return
+  fi
+  [ -n "$candidates" ] || { echo "No sessions older than $older_than in the selected scope."; return; }
+
+  header
+  printf '%s  Cleanup preview%s %s(older than %s)%s\n\n' "$BOLD" "$RESET" "$DIM" "$older_than" "$RESET"
+  printf '%s\n' "$candidates" | render_list
+  total=$(printf '%s\n' "$candidates" | wc -l | tr -d ' ')
+  printf '\n  %s candidate session(s).\n' "$total"
+  if [ "$yes" -eq 0 ]; then
+    printf '  %sPreview only.%s Re-run with %s--yes%s to move them to recoverable trash.\n' "$YELLOW" "$RESET" "$BOLD" "$RESET"
+    return
+  fi
+
+  printf '\n'
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    path=$(printf '%s' "$line" | cut -f9-)
+    trash_session "$path" || failed=$((failed + 1))
+  done <<EOF
+$candidates
+EOF
+  [ "$failed" -eq 0 ]
+}
+
 resolve_uuid() {
   local prefix="$1" matches count
   case "$prefix" in
@@ -212,12 +357,22 @@ trash_session() {
     echo "refuse: $uuid is active (${age}s ago, < ${ACTIVE_THRESHOLD_SEC}s)" >&2
     return 1
   fi
-  mkdir -p "$TRASH_DIR"
+  if ! mkdir -p "$TRASH_DIR"; then
+    echo "error: could not create recovery trash: $TRASH_DIR" >&2
+    return 1
+  fi
   item="$TRASH_DIR/$(date -u +%Y%m%dT%H%M%SZ)-$uuid"
   [ -e "$item" ] && item="$item-$$"
-  mkdir -p "$item"
-  jq -n --arg uuid "$uuid" --arg original "$f" --arg trashed_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-    '{uuid:$uuid, original_path:$original, trashed_at:$trashed_at}' > "$item/metadata.json"
+  if ! mkdir -p "$item"; then
+    echo "error: could not create trash entry: $item" >&2
+    return 1
+  fi
+  if ! jq -n --arg uuid "$uuid" --arg original "$f" --arg trashed_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    '{uuid:$uuid, original_path:$original, trashed_at:$trashed_at}' > "$item/metadata.json"; then
+    rm -rf "$item"
+    echo "error: could not write recovery metadata" >&2
+    return 1
+  fi
   if ! mv "$f" "$item/session.jsonl"; then
     rm -rf "$item"
     echo "error: could not move transcript to trash" >&2
@@ -282,9 +437,18 @@ cmd_restore() {
   item=$(find_trash_item "$1") || return
   original=$(jq -r '.original_path' "$item/metadata.json")
   [ ! -e "$original" ] || { echo "refuse: destination already exists: $original" >&2; return 1; }
-  parent=$(dirname "$original"); stem="${original%.jsonl}"; mkdir -p "$parent"
-  mv "$item/session.jsonl" "$original"
-  [ -d "$item/artifacts" ] && mv "$item/artifacts" "$stem"
+  stem="${original%.jsonl}"
+  [ ! -e "$stem" ] || { echo "refuse: artifact destination already exists: $stem" >&2; return 1; }
+  parent=$(dirname "$original")
+  if ! mkdir -p "$parent" || ! mv "$item/session.jsonl" "$original"; then
+    echo "error: could not restore transcript" >&2
+    return 1
+  fi
+  if [ -d "$item/artifacts" ] && ! mv "$item/artifacts" "$stem"; then
+    mv "$original" "$item/session.jsonl" || true
+    echo "error: could not restore artifacts; transcript returned to trash" >&2
+    return 1
+  fi
   rm -rf "$item"
   printf '%srestored:%s %s\n' "$GREEN" "$RESET" "$original"
 }
@@ -336,21 +500,23 @@ while [ $# -gt 0 ]; do
     --all|-a) SCOPE="all"; shift ;;
     --project|-p) [ $# -ge 2 ] || { echo "$1 needs a path" >&2; exit 2; }; PROJECT_PATH="$2"; shift 2 ;;
     --json) JSON=1; shift ;;
-    --no-color) NO_COLOR=1; BOLD=''; DIM=''; CYAN=''; GREEN=''; YELLOW=''; RESET=''; shift ;;
+    --no-color) NO_COLOR=1; BOLD=''; DIM=''; CYAN=''; GREEN=''; YELLOW=''; RED=''; RESET=''; shift ;;
     --help|-h|help) usage; exit 0 ;;
     --version|-v) echo "ccsc $VERSION"; exit 0 ;;
-    list|stats|trash|delete|restore|purge|interactive) break ;;
+    list|stats|doctor|clean|trash|delete|restore|purge|interactive) break ;;
     -*) echo "unknown option: $1" >&2; exit 2 ;;
     *) break ;;
   esac
 done
 
 case "${1:-interactive}" in
-  list) shift; cmd_list "$@" ;;
-  stats) shift; cmd_stats "$@" ;;
-  trash|delete) shift; cmd_trash "$@" ;;
-  restore) shift; cmd_restore "$@" ;;
-  purge) shift; cmd_purge "$@" ;;
-  interactive|"") cmd_interactive ;;
+  doctor) shift; cmd_doctor "$@" ;;
+  list) shift; validate_config && require_jq && cmd_list "$@" ;;
+  stats) shift; validate_config && require_jq && cmd_stats "$@" ;;
+  clean) shift; validate_config && require_jq && cmd_clean "$@" ;;
+  trash|delete) shift; validate_config && require_jq && cmd_trash "$@" ;;
+  restore) shift; validate_config && require_jq && cmd_restore "$@" ;;
+  purge) shift; validate_config && require_jq && cmd_purge "$@" ;;
+  interactive|"") validate_config && require_jq && cmd_interactive ;;
   *) echo "unknown command: $1" >&2; usage >&2; exit 2 ;;
 esac

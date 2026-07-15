@@ -1,0 +1,26 @@
+name: Feature request
+description: Propose a focused improvement to ccsc
+title: "[Feature]: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What session-management problem are you trying to solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Include an example command or interaction when possible.
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety
+      options:
+        - label: This proposal preserves preview-first bulk actions and recoverable deletion.
+          required: true

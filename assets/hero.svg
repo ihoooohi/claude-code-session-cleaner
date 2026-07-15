@@ -30,7 +30,7 @@
     <text x="280" y="29" text-anchor="middle" fill="#667085" font-family="ui-monospace,SFMono-Regular,monospace" font-size="12">ccsc</text>
     <g font-family="ui-monospace,SFMono-Regular,monospace">
       <text x="27" y="86" fill="#a78bfa" font-size="15" font-weight="bold">◆ Claude Session Cleaner</text>
-      <text x="258" y="86" fill="#64748b" font-size="12">v2.0.0</text>
+      <text x="258" y="86" fill="#64748b" font-size="12">v2.1.0</text>
       <text x="27" y="112" fill="#64748b" font-size="12">Safe space for unfinished conversations.</text>
       <text x="27" y="151" fill="#f1f5f9" font-size="13" font-weight="bold">Sessions</text><text x="93" y="151" fill="#64748b" font-size="12">(newest first)</text>
       <text x="27" y="183" fill="#8b5cf6" font-size="12">[  1]</text><text x="82" y="183" fill="#aab4ca" font-size="12">Jul 15  portfolio</text><text x="253" y="183" fill="#cbd5e1" font-size="12">★ polish the release</text>

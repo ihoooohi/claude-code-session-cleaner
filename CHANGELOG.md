@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented here.
 
+## [2.1.0] - 2026-07-15
+
+### Added
+
+- Safe age-based cleanup policies with preview-first `clean --older-than`
+- `doctor` command for dependency, platform, storage, permission, and trash diagnostics
+- Visible active-session status in the terminal browser
+- Professional command reference, design notes, FAQ, and open-source policies
+
+### Changed
+
+- Expanded isolated integration coverage to include diagnostics and policy cleanup
+- Refined repository metadata, issue forms, and bilingual project presentation
+
 ## [2.0.0] - 2026-07-15
 
 ### Added
